@@ -4,13 +4,10 @@
  * @details This header contains useful macros and functions for setting up peripherals,
  * reading sensors and controlling the speed controller of the rc car via a pwm signal 
  * 
- * @defgroup Macros Macros
- * @brief Macros
- * 
- * @defgroup GPIOPins Macros
+ * @defgroup GPIOPins
  * @brief Define GPIO pins
- * @c THROTTLE_OUT_GPIO: pwm throttle command output 
  * 
+ * @{
 */
 
 /** @def THROTTLE_OUT_GPIO
@@ -35,6 +32,7 @@
 
 /** @defgroup MeasurementPeriods
  * @brief Define sample rate of tachometer and HC­SR04 distance sensor
+ * 
  * @{
 */
 
@@ -50,6 +48,7 @@
 
 /** @defgroup HardwareSpecs
  * @brief Define hardware specifications
+ * 
  * @{
 */
 #define ROT_VEL_MAX 100.0              //[rot/s] max should never be reached
