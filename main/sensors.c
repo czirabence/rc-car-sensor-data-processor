@@ -1,20 +1,18 @@
 #include "sensors.h"
+#include <stdlib.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
 #include "driver/pulse_cnt.h"
 #include "driver/ledc.h"
 #include "driver/mcpwm_cap.h"
 #include "driver/mcpwm_sync.h"
 #include "esp_timer.h"
 #include "esp_private/esp_clk.h"
-#include "driver/i2c.h"
-#include "mpu6050.h"
 
-volatile int tachometer_count = 0;
+volatile int tachometer_counts = 0;
 volatile uint32_t throttle_in_duty_ticks = 0;
 volatile uint32_t echo_tof_ticks = 0;
-//static mpu6050_handle_t mpu6050_dev = NULL;
 
 static portMUX_TYPE tachometer_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE throttle_in_spinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -24,7 +22,7 @@ void tachometer_callback(void *arg)
 {
     pcnt_unit_handle_t pcnt_handle = (pcnt_unit_handle_t)(arg);
     taskENTER_CRITICAL_ISR(&tachometer_spinlock);
-    ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_handle, &tachometer_count));
+    ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_handle, &tachometer_counts));
     taskEXIT_CRITICAL_ISR(&tachometer_spinlock);
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt_handle));
 }
@@ -32,7 +30,9 @@ void tachometer_callback(void *arg)
 void tachometer_setup(void)
 {
     pcnt_unit_config_t unit_config = {
-        .high_limit = ROT_VEL_MAX * TACHO_COUNTS_PER_ROTATION * VELO_MEAS_PERIOD_MS/1E3,
+        .high_limit = ROT_VEL_MAX *
+                      TACHO_COUNTS_PER_REVOLUTION *
+                      VELO_MEAS_PERIOD_MS/1E3,
         .low_limit = -1,
         .flags.accum_count = false,
     };
@@ -49,14 +49,18 @@ void tachometer_setup(void)
     pcnt_channel_handle_t channel_handle = NULL;
     ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &unit_handle));
     ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(unit_handle, &filter_config));
-    ESP_ERROR_CHECK(pcnt_new_channel(unit_handle, &channel_config, &channel_handle));
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(channel_handle, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));
+    ESP_ERROR_CHECK(pcnt_new_channel(unit_handle,
+                                     &channel_config,
+                                     &channel_handle));
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(channel_handle,
+                                                 PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                                 PCNT_CHANNEL_EDGE_ACTION_INCREASE));
     ESP_ERROR_CHECK(pcnt_unit_enable(unit_handle));
     ESP_ERROR_CHECK(pcnt_unit_start(unit_handle));
     const esp_timer_create_args_t periodic_timer_args = {
         .callback = tachometer_callback,
         .arg = unit_handle,
-        .name = "tacho_callback"
+        .name = "tachometer_callback"
     };
     esp_timer_handle_t tacho_periodic_handle = NULL;
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &tacho_periodic_handle));
@@ -74,7 +78,9 @@ mcpwm_cap_timer_handle_t capture_timer_setup(int group_id)
     return timer_handle;
 }
 
-    bool throttle_in_callback(mcpwm_cap_channel_handle_t cap_chan, const mcpwm_capture_event_data_t *edata, void *user_ctx)
+bool throttle_in_callback(mcpwm_cap_channel_handle_t cap_chan,
+                          const mcpwm_capture_event_data_t *edata,
+                          void *user_ctx)
 {
     static uint32_t pwm_pos_edge_ticks = 0;
     if(edata->cap_edge == MCPWM_CAP_EDGE_POS)
@@ -106,14 +112,20 @@ void throttle_in_setup(mcpwm_cap_timer_handle_t timer_handle)
         .on_cap = throttle_in_callback,
     };
     mcpwm_cap_channel_handle_t channel_handle = NULL;
-    ESP_ERROR_CHECK(mcpwm_new_capture_channel(timer_handle, &channel_config, &channel_handle));
-    ESP_ERROR_CHECK(mcpwm_capture_channel_register_event_callbacks(channel_handle, &event_callbacks, NULL));
+    ESP_ERROR_CHECK(mcpwm_new_capture_channel(timer_handle,
+                                              &channel_config,
+                                              &channel_handle));
+    ESP_ERROR_CHECK(mcpwm_capture_channel_register_event_callbacks(channel_handle,
+                                                                   &event_callbacks,
+                                                                   NULL));
     ESP_ERROR_CHECK(mcpwm_capture_channel_enable(channel_handle));
 }
 
 //ultrasonic distance sensor helper functions
-//taken from esp-idf/examples/peripherals/mcpwm/mcpwm_capture_hc_sr04
-bool hc_sr04_echo_callback(mcpwm_cap_channel_handle_t cap_chan, const mcpwm_capture_event_data_t *edata, void *user_data)
+//based on esp-idf/examples/peripherals/mcpwm/mcpwm_capture_hc_sr04
+bool hc_sr04_echo_callback(mcpwm_cap_channel_handle_t cap_chan,
+                           const mcpwm_capture_event_data_t *edata,
+                           void *user_data)
 {
     static uint32_t cap_val_pos_edge = 0;
     if (edata->cap_edge == MCPWM_CAP_EDGE_POS) 
@@ -151,8 +163,12 @@ void distance_sensor_setup(mcpwm_cap_timer_handle_t timer_handle)
         .on_cap = hc_sr04_echo_callback,
     };
     mcpwm_cap_channel_handle_t channel_handle = NULL;
-    ESP_ERROR_CHECK(mcpwm_new_capture_channel(timer_handle, &channel_config, &channel_handle));
-    ESP_ERROR_CHECK(mcpwm_capture_channel_register_event_callbacks(channel_handle, &event_callbacks, NULL));
+    ESP_ERROR_CHECK(mcpwm_new_capture_channel(timer_handle,
+                                              &channel_config,
+                                              &channel_handle));
+    ESP_ERROR_CHECK(mcpwm_capture_channel_register_event_callbacks(channel_handle,
+                                                                   &event_callbacks,
+                                                                   NULL));
     ESP_ERROR_CHECK(mcpwm_capture_channel_enable(channel_handle));
     //config trig pin
     gpio_config_t io_conf = {
@@ -187,7 +203,7 @@ void throttle_out_setup(void)
         .channel = LEDC_CHANNEL_0,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = LEDC_TIMER_0,
-        .duty = (uint32_t)(THROTTLE_STANDSTILL_DUTY * 1023),
+        .duty = (uint32_t)(THROTTLE_STATIONARY_DUTY * 1023 / 100),
         .hpoint = 0,
         .flags.output_invert = false,
     };
@@ -195,29 +211,7 @@ void throttle_out_setup(void)
     ledc_channel_config(&channel_config);
 }
 
-// void accelerometer_setup(void)
-// {
-//     i2c_config_t i2c_config = {
-//         .mode = I2C_MODE_MASTER,
-//         .sda_io_num = ,
-//         .sda_pullup_en = GPIO_PULLUP_ENABLE,
-//         .scl_io_num = ,
-//         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-//         .master.clk_speed = I2C_CLK_FREQ_HZ,
-//         .clk_flags = 0,
-//     };
-//     i2c_param_config(I2C_NUM_0, i2c_config);
-//     ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, ));
-
-// }
-// void mpu6050_init()
-// {
-//     mpu6050_dev = mpu6050_create(BSP_I2C_NUM, MPU6050_I2C_ADDRESS);
-//     mpu6050_config(mpu6050_dev, ACCE_FS_4G, GYRO_FS_500DPS);
-//     mpu6050_wake_up(mpu6050_dev);
-// }
-
-void sensors_init(QueueHandle_t)
+void sensors_init(void)
 {
     mcpwm_cap_timer_handle_t timer_handle = capture_timer_setup(1);
     ESP_ERROR_CHECK(mcpwm_capture_timer_enable(timer_handle));
@@ -226,22 +220,21 @@ void sensors_init(QueueHandle_t)
     throttle_in_setup(timer_handle);
     tachometer_setup();
     throttle_out_setup();
-    //mpu6050_init();
-
-
 }
 
 float get_velocity(void)
 {
     taskENTER_CRITICAL(&tachometer_spinlock);
-    float rot_s = tachometer_count / TACHO_COUNTS_PER_ROTATION * 1E3/VELO_MEAS_PERIOD_MS;
+    float rot_s = tachometer_counts / 
+                  TACHO_COUNTS_PER_REVOLUTION *
+                  (6E4/VELO_MEAS_PERIOD_MS);
     taskEXIT_CRITICAL(&tachometer_spinlock);
     return rot_s;
 }
 float get_throttle_in_duty(void)
 {
     taskENTER_CRITICAL(&throttle_in_spinlock);
-    uint32_t out = throttle_input_duty_ticks;
+    uint32_t out = throttle_in_duty_ticks;
     taskEXIT_CRITICAL(&throttle_in_spinlock);
     return out * 100.0*PWM_FREQ / esp_clk_apb_freq();
 }
@@ -252,8 +245,25 @@ float get_distance(void)
     taskEXIT_CRITICAL(&echo_spinlock);
     return out * (343.0/2 / esp_clk_apb_freq());
 }
-uint32_t set_throttle_duty(float duty)
+void set_throttle_duty(float duty)
 {
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, (uint32_t)(duty * 1023 / 100));
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0);
+    ledc_set_duty(LEDC_HIGH_SPEED_MODE,
+                  LEDC_CHANNEL_0,
+                  (uint32_t)(duty * 1023 / 100));
+    ledc_update_duty(LEDC_HIGH_SPEED_MODE,
+                     LEDC_CHANNEL_0);
+}
+measurement_data get_measurements()
+{
+    measurement_data out = {
+        .time_us = esp_timer_get_time(),
+        .rot_velocity = get_velocity(),
+        .throttle_in_duty = get_throttle_in_duty(),
+        .distance = get_distance(),
+    };
+    return out;
+}
+void measurements_to_csv(char *buffer, measurement_data data)
+{
+    sprintf(buffer, "%"PRId64", %f, %f, %f\n", data.time_us, data.rot_velocity, data.throttle_in_duty, data.distance);
 }
