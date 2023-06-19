@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['measurement_5fdata_0',['measurement_data',['../structmeasurement__data.html',1,'']]]
+  ['measurements_5fdata_0',['measurements_data',['../structmeasurements__data.html',1,'']]]
 ];
