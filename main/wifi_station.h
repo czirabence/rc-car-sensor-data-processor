@@ -8,6 +8,9 @@
  * @version 0.1
  * @date 2023-06-12 
 */
+#ifndef WIFI_STA_H
+#define WIFI_STA_H
+
 /**
  * @brief initialize and start wifi station. Esp event loop must be created 
  * via esp_event_loop_create_default() before this function is called.
@@ -19,3 +22,5 @@ void wifi_init_sta(void);
  * 
  */
 void nvs_init(void);
+
+#endif //__WIFI_STA_H__

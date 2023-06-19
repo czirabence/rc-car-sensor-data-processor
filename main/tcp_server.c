@@ -11,6 +11,7 @@
 #include <sys/param.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -27,33 +28,56 @@
 #define KEEPALIVE_IDLE              CONFIG_EXAMPLE_KEEPALIVE_IDLE
 #define KEEPALIVE_INTERVAL          CONFIG_EXAMPLE_KEEPALIVE_INTERVAL
 #define KEEPALIVE_COUNT             CONFIG_EXAMPLE_KEEPALIVE_COUNT
+#define TX_BUFF_SIZE 60
 
 static const char *TAG = "tcp_server";
 
-static void do_transmit(const int sock, char *tx_buffer)
+//csv header belonging to measurements_to_csv() from sensors.h
+static const char *header = "time[us], rot/min, throttle in duty[\%], distance[m]\n";
+
+//indicate server-client connection state to other tasks
+enum TCP_server_state server_state = Disconnected;
+
+static void do_transmit(const int sock, QueueHandle_t xStringQueue)
 {
-  while (true) {
-    ESP_LOGI(TAG, "transmitting %zu bytes", strlen(tx_buffer));
-    // send() can return less bytes than supplied length.
-    // Walk-around for robust implementation.
-    size_t len = strlen(tx_buffer);
+    char tx_buff[TX_BUFF_SIZE];
+    //transmit header to every client once
+    size_t len = strlen(header);
     size_t to_write = len;
     while (to_write > 0) {
-        int written = send(sock, tx_buffer + (len - to_write), to_write, 0);
+        int written = send(sock, header + (len - to_write), to_write, 0);
         if (written < 0) {
             ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
             return;
         }
         to_write -= written;
     }
-    vTaskDelay(100/portTICK_PERIOD_MS);
-  }
+    //clear old data in StringQueue
+    xQueueReset(xStringQueue);
+    //transmit strings received from measurements_task
+    while (true) {
+        if (xQueueReceive(xStringQueue, &tx_buff, portMAX_DELAY)) {
+            ESP_LOGI(TAG, "transmitting %zu bytes", strlen(tx_buff));
+            // send() can return less bytes than supplied length.
+            // Walk-around for robust implementation.
+            len = strlen(tx_buff);
+            to_write = len;
+            while (to_write > 0) {
+                int written = send(sock, tx_buff + (len - to_write), to_write, 0);
+                if (written < 0) {
+                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+                    return;
+                }
+                to_write -= written;
+            }
+        }
+    }
 }
 
 void tcp_server_task(void *pvParameters)
 {
     char addr_str[128];
-    char *tx_buffer = (char*)pvParameters;
+    QueueHandle_t xStringQueue = (QueueHandle_t)pvParameters;
     int ip_protocol = 0;
     int keepAlive = 1;
     int keepIdle = KEEPALIVE_IDLE;
@@ -128,10 +152,12 @@ void tcp_server_task(void *pvParameters)
             inet6_ntoa_r(((struct sockaddr_in6 *)&source_addr)->sin6_addr, addr_str, sizeof(addr_str) - 1);
         }
     #endif
+        server_state = Connected;
         ESP_LOGI(TAG, "Socket accepted ip address: %s", addr_str);
 
-        do_transmit(sock, tx_buffer);
+        do_transmit(sock, xStringQueue);
 
+        server_state = Disconnected;
         shutdown(sock, 0);
         close(sock);
     }

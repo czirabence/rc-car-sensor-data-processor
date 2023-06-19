@@ -11,6 +11,19 @@
  * @version 0.1
  * @date 2023-06-12
  */
+#ifndef TCP_SERVER_H
+#define TCP_SERVER_H
+
+enum TCP_server_state{
+    Connected,
+    Disconnected
+};
+
+/**
+ * @brief Indicate TCP server-client connection state
+ */
+extern enum TCP_server_state server_state; 
+
 /**
  * @brief Initialise and run tcp server to send messages to client periodically.
  * 
@@ -18,3 +31,5 @@
  * Content of the array can change between two transmission cycles.
  */
 void tcp_server_task(void *pvParameters);
+
+#endif //__TCP_SERVER_H__

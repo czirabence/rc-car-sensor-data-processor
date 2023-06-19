@@ -1,6 +1,7 @@
 #include "sensors.h"
 #include <stdlib.h>
 #include <inttypes.h>
+#include <assert.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/pulse_cnt.h"
@@ -253,17 +254,16 @@ void set_throttle_duty(float duty)
     ledc_update_duty(LEDC_HIGH_SPEED_MODE,
                      LEDC_CHANNEL_0);
 }
-measurement_data get_measurements()
+void get_measurements(measurements_data *data)
 {
-    measurement_data out = {
-        .time_us = esp_timer_get_time(),
-        .rot_velocity = get_velocity(),
-        .throttle_in_duty = get_throttle_in_duty(),
-        .distance = get_distance(),
-    };
-    return out;
+    assert(data != NULL);
+    data->time_us = esp_timer_get_time();
+    data->rot_velocity = get_velocity();
+    data->throttle_in_duty = get_throttle_in_duty();
+    data->distance = get_distance();
 }
-void measurements_to_csv(char *buffer, measurement_data data)
+void measurements_to_csv(char *buffer, measurements_data *data)
 {
-    sprintf(buffer, "%"PRId64", %f, %f, %f\n", data.time_us, data.rot_velocity, data.throttle_in_duty, data.distance);
+    assert(buffer != NULL && data != NULL);
+    sprintf(buffer, "%"PRId64", %f, %f, %f\n", data->time_us, data->rot_velocity, data->throttle_in_duty, data->distance);
 }

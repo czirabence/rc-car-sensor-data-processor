@@ -1,5 +1,3 @@
-#include <inttypes.h>
-
 /** @file sensors.h
  * @author Czira Bence (czirabence@gmail.com)
  * 
@@ -41,6 +39,11 @@
  * @note HC-SR04 distance measurement was implemented according to the <b> mcpwm_capture_hc_sr04 </b> project
  * from esp-idf builtin examples. 
  */
+#ifndef SENSORS_H
+#define SENSOR_H
+
+#include <inttypes.h>
+
 /** @name GPIO pins
  * @{
 */
@@ -88,7 +91,7 @@
 /** @def ROT_VEL_MAX
  * @brief rotational velocity limit for tachometer [rot/min]
 */
-#define ROT_VEL_MAX 100.0
+#define ROT_VEL_MAX 6000.0
 /** @def TACHO_COUNTS_PER_REVOLUTION
  * @brief tachometer resolution [counts/revolution]
 */
@@ -102,16 +105,21 @@
 */
 #define THROTTLE_STATIONARY_DUTY 11.258452
 /**@}*/
+
+//A measurements csv row (1 * uintt64_t + 3 * float), s well as
+//the csv header and other transmitted messages need to fit in  
+#define CSV_BUFF_SIZE 60
+
 /**
  * @brief Hold measurement values and a timestamp.
  * 
  */
-typedef struct measurement_data{
+typedef struct measurements_data{
     uint64_t time_us;
     float rot_velocity;
     float throttle_in_duty;
     float distance;
-} measurement_data;
+} measurements_data;
 
 /**
  * @brief Configure peripherals for sensors and actuators
@@ -154,13 +162,15 @@ void set_throttle_duty(float duty);
  * @brief get a #measurement_data instance with current measurements and a timestamp in microseconds.
  * Time is retrieved via esp_timer::esp_timer_get_time(), measured since boot time.
  * 
- * @return measurement data 
+ * @param pointer to measurements_data instance which will be updated
  */
-measurement_data get_measurements(void);
+void get_measurements(measurements_data *data);
 /**
  * @brief Convert measurement data into csv format, write result into <b>buffer</b>.
  * 
  * @param buffer - char array destination
  * @param data - a measurement_data struct
  */
-void measurements_to_csv(char *buffer, measurement_data data);
+void measurements_to_csv(char *buffer, measurements_data *data);
+
+#endif // __SENSORS_H__
