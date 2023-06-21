@@ -112,4 +112,20 @@ void app_main(void)
     QueueHandle_t pvParameters[] = {xMeasurementsQueue, xMeasurementsCSVQueue}; 
     xTaskCreatePinnedToCore(measurements_task, "measurements", 2048, (void *)pvParameters, 2, NULL, 0);
     xTaskCreatePinnedToCore(output_compute_task, "output_compute", 2048, (void *)xMeasurementsQueue, 2, NULL, 1);
+    if(esp_register_freertos_tick_hook_for_cpu(, 0) == ESP_OK)
+    {
+        ESP_LOGE(TAG, "Registered tick hook on cpu 0");
+    }
+    else //ESP_ERR_NO_MEM or ESP_ERR_INVALID_ARG
+    {
+        ESP_LOGE(TAG, "Unsuccessfull tick hook regitration on cpu 0");
+    }
+    if(esp_register_freertos_tick_hook_for_cpu(, 1) == ESP_OK)
+    {
+        ESP_LOGE(TAG, "Registered tick hook on cpu 1");
+    }
+    else //ESP_ERR_NO_MEM or ESP_ERR_INVALID_ARG
+    {
+        ESP_LOGE(TAG, "Unsuccessfull tick hook regitration on cpu 1");
+    }
 }
